@@ -1,0 +1,384 @@
+---
+import { getCollection, render, type CollectionEntry } from 'astro:content';
+import Base from '../../layouts/Base.astro';
+
+export async function getStaticPaths() {
+  const recipes = await getCollection('recipes');
+  return recipes.map(recipe => ({
+    params: { slug: recipe.id },
+    props: { recipe },
+  }));
+}
+
+interface Props { recipe: CollectionEntry<'recipes'> }
+const { recipe } = Astro.props;
+const { data } = recipe;
+const { Content } = await render(recipe);
+
+const totalMin = (data.prepMinutes ?? 0) + (data.cookMinutes ?? 0);
+
+// Macro percent for visual bars (rough macro distribution by calories per gram)
+const proteinCal = data.nutrition.protein * 4;
+const carbsCal = data.nutrition.carbs * 4;
+const fatCal = data.nutrition.fat * 9;
+const macroSum = proteinCal + carbsCal + fatCal || 1;
+const proteinPct = Math.round((proteinCal / macroSum) * 100);
+const carbsPct = Math.round((carbsCal / macroSum) * 100);
+const fatPct = 100 - proteinPct - carbsPct;
+
+function fmtQty(q: number): string {
+  if (Number.isInteger(q)) return String(q);
+  return q.toFixed(2).replace(/\.?0+$/, '');
+}
+
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+function renderInline(s: string): string {
+  // Escape, then convert **bold** to <strong>
+  return escapeHtml(s).replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+}
+
+const persistKey = `recipe:${recipe.id}`;
+---
+<Base title={`${data.title} · המתכונים של דוד`} description={data.description}>
+  <article class="max-w-4xl mx-auto px-4 py-8 print:py-2">
+    <!-- Breadcrumb -->
+    <nav class="text-sm text-stone-500 dark:text-stone-400 mb-6 print:hidden">
+      <a href="/" class="hover:text-spice-600">📖 כל המתכונים</a>
+      <span class="mx-2">›</span>
+      <span class="text-stone-700 dark:text-stone-300">{data.title}</span>
+    </nav>
+
+    <!-- Hero -->
+    <div class="rounded-3xl overflow-hidden bg-gradient-to-bl from-spice-100 via-spice-200 to-spice-300 dark:from-spice-900 dark:via-spice-800 dark:to-stone-800 aspect-[16/7] flex items-center justify-center mb-8 shadow-sm print:hidden">
+      {data.image
+        ? <img src={data.image} alt={data.title} class="w-full h-full object-cover" />
+        : <span class="text-9xl drop-shadow-sm">{data.emoji ?? '🍽️'}</span>
+      }
+    </div>
+
+    <!-- Title block -->
+    <header class="mb-8">
+      <div class="flex flex-wrap gap-2 mb-3">
+        {data.tags.map(t => (
+          <span class="text-xs font-medium px-2.5 py-1 rounded-full bg-spice-100 text-spice-800 dark:bg-spice-900/50 dark:text-spice-200">
+            {t}
+          </span>
+        ))}
+      </div>
+      <h1 class="font-display text-4xl md:text-5xl font-bold leading-tight">
+        {data.emoji && <span class="ml-2">{data.emoji}</span>}{data.title}
+      </h1>
+      {data.description && (
+        <p class="mt-4 text-lg text-stone-600 dark:text-stone-300 leading-relaxed">
+          {data.description}
+        </p>
+      )}
+      <div class="mt-4 text-sm text-stone-500 dark:text-stone-400 flex flex-wrap gap-x-4 gap-y-1">
+        <span>גרסה {data.version}</span>
+        <span>·</span>
+        <span>{data.date}</span>
+        <span>·</span>
+        <span>רמת קושי: {data.difficulty}</span>
+      </div>
+    </header>
+
+    <!-- Quick stats bar -->
+    <div class="grid grid-cols-2 md:grid-cols-5 gap-3 mb-8 print:grid-cols-5">
+      <div class="rounded-xl bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-800 p-4 text-center">
+        <div class="text-xs text-stone-500 dark:text-stone-400 mb-1">הכנה</div>
+        <div class="font-display text-2xl font-bold">{data.prepMinutes ?? '—'}<span class="text-sm font-normal text-stone-500 mr-1">ד׳</span></div>
+      </div>
+      <div class="rounded-xl bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-800 p-4 text-center">
+        <div class="text-xs text-stone-500 dark:text-stone-400 mb-1">בישול</div>
+        <div class="font-display text-2xl font-bold">{data.cookMinutes ?? '—'}<span class="text-sm font-normal text-stone-500 mr-1">ד׳</span></div>
+      </div>
+      <div class="rounded-xl bg-spice-50 dark:bg-spice-900/30 border border-spice-200 dark:border-spice-800 p-4 text-center">
+        <div class="text-xs text-spice-700 dark:text-spice-300 mb-1">סה״כ זמן</div>
+        <div class="font-display text-2xl font-bold text-spice-700 dark:text-spice-200">{totalMin}<span class="text-sm font-normal mr-1">ד׳</span></div>
+      </div>
+      <div class="rounded-xl bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-800 p-4 text-center">
+        <div class="text-xs text-stone-500 dark:text-stone-400 mb-1">מנות</div>
+        <div class="font-display text-2xl font-bold" id="serving-display">{data.servings}</div>
+      </div>
+      <div class="rounded-xl bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-800 p-4 text-center">
+        <div class="text-xs text-stone-500 dark:text-stone-400 mb-1">קק״ל למנה</div>
+        <div class="font-display text-2xl font-bold">{data.nutrition.calories}</div>
+      </div>
+    </div>
+
+    <!-- Macro card -->
+    <section class="rounded-2xl bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-800 p-6 mb-8">
+      <div class="flex items-center justify-between mb-4">
+        <h2 class="font-display text-xl font-bold">פירוט תזונתי <span class="text-sm font-normal text-stone-500">(למנה)</span></h2>
+        <span class="text-2xl font-display font-bold text-spice-600">{data.nutrition.calories} <span class="text-sm font-normal text-stone-500">קק״ל</span></span>
+      </div>
+      <!-- Stacked bar -->
+      <div class="flex h-3 rounded-full overflow-hidden bg-stone-100 dark:bg-stone-800 mb-4">
+        <div class="bg-emerald-500" style={`width:${proteinPct}%`} title={`חלבון ${proteinPct}%`}></div>
+        <div class="bg-amber-400" style={`width:${carbsPct}%`} title={`פחמימות ${carbsPct}%`}></div>
+        <div class="bg-rose-400" style={`width:${fatPct}%`} title={`שומן ${fatPct}%`}></div>
+      </div>
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div class="flex items-center gap-3">
+          <span class="w-3 h-3 rounded-full bg-emerald-500"></span>
+          <div>
+            <div class="text-xs text-stone-500 dark:text-stone-400">חלבון</div>
+            <div class="font-bold">{data.nutrition.protein}g <span class="text-xs font-normal text-stone-500">({proteinPct}%)</span></div>
+          </div>
+        </div>
+        <div class="flex items-center gap-3">
+          <span class="w-3 h-3 rounded-full bg-amber-400"></span>
+          <div>
+            <div class="text-xs text-stone-500 dark:text-stone-400">פחמימות</div>
+            <div class="font-bold">{data.nutrition.carbs}g <span class="text-xs font-normal text-stone-500">({carbsPct}%)</span></div>
+          </div>
+        </div>
+        <div class="flex items-center gap-3">
+          <span class="w-3 h-3 rounded-full bg-rose-400"></span>
+          <div>
+            <div class="text-xs text-stone-500 dark:text-stone-400">שומן</div>
+            <div class="font-bold">{data.nutrition.fat}g <span class="text-xs font-normal text-stone-500">({fatPct}%)</span></div>
+          </div>
+        </div>
+        {data.nutrition.fiber !== undefined && (
+          <div class="flex items-center gap-3">
+            <span class="w-3 h-3 rounded-full bg-stone-400"></span>
+            <div>
+              <div class="text-xs text-stone-500 dark:text-stone-400">סיבים</div>
+              <div class="font-bold">{data.nutrition.fiber}g</div>
+            </div>
+          </div>
+        )}
+      </div>
+    </section>
+
+    <!-- Servings scaler + Print -->
+    <div class="flex flex-wrap items-center justify-between gap-4 mb-8 print:hidden">
+      <div class="flex items-center gap-3 bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-800 rounded-xl px-4 py-3">
+        <span class="text-sm text-stone-600 dark:text-stone-300">סקיילר מנות:</span>
+        <button id="serv-dec" class="w-8 h-8 rounded-lg bg-stone-100 dark:bg-stone-800 hover:bg-spice-100 dark:hover:bg-spice-900 font-bold text-lg leading-none">−</button>
+        <span id="serv-count" class="font-display font-bold text-xl w-8 text-center">{data.servings}</span>
+        <button id="serv-inc" class="w-8 h-8 rounded-lg bg-stone-100 dark:bg-stone-800 hover:bg-spice-100 dark:hover:bg-spice-900 font-bold text-lg leading-none">+</button>
+        <button id="serv-reset" class="text-xs text-stone-500 hover:text-spice-600 mr-2">איפוס</button>
+      </div>
+      <div class="flex gap-2">
+        <button id="reset-checks" class="px-4 py-2.5 rounded-xl bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 hover:bg-stone-50 dark:hover:bg-stone-800 text-sm font-medium">
+          ↺ אפס סימונים
+        </button>
+        <button onclick="window.print()" class="px-4 py-2.5 rounded-xl bg-spice-600 hover:bg-spice-700 text-white text-sm font-medium flex items-center gap-2">
+          🖨️ הדפסה
+        </button>
+      </div>
+    </div>
+
+    <!-- Two-column layout: ingredients + steps -->
+    <div class="grid lg:grid-cols-[1fr_1.4fr] gap-8">
+      <!-- Ingredients -->
+      <section class="lg:sticky lg:top-20 lg:self-start">
+        <h2 class="font-display text-2xl font-bold mb-4 flex items-center gap-2">
+          <span>🥘</span> רכיבים
+        </h2>
+        {data.ingredientGroups.map((group, gi) => (
+          <div class="mb-6">
+            <h3 class="text-sm font-bold uppercase tracking-wider text-stone-500 dark:text-stone-400 mb-2">
+              {group.title}
+            </h3>
+            <ul class="space-y-1">
+              {group.items.map((item, ii) => {
+                const id = `ing-${gi}-${ii}`;
+                return (
+                  <li>
+                    <label class="flex items-start gap-3 px-3 py-2 rounded-lg hover:bg-stone-100 dark:hover:bg-stone-800/60 cursor-pointer transition-colors group">
+                      <input
+                        type="checkbox"
+                        class="ingredient-check mt-1 w-4 h-4 rounded border-stone-300 text-spice-600 focus:ring-spice-500 cursor-pointer"
+                        data-id={id}
+                      />
+                      <span class="flex-1 text-sm leading-relaxed group-has-[:checked]:line-through group-has-[:checked]:text-stone-400">
+                        {item.qty !== null && item.qty !== undefined && (
+                          <span class="font-bold text-spice-700 dark:text-spice-300 ml-1">
+                            <span class="ingredient-qty" data-base={item.qty}>{fmtQty(item.qty)}</span>
+                            {item.unit && <span class="font-normal"> {item.unit}</span>}
+                          </span>
+                        )}
+                        <span>{item.name}</span>
+                        {item.note && (
+                          <span class="block text-xs text-stone-500 dark:text-stone-400 mt-0.5">({item.note})</span>
+                        )}
+                      </span>
+                    </label>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        ))}
+      </section>
+
+      <!-- Steps -->
+      <section>
+        <h2 class="font-display text-2xl font-bold mb-4 flex items-center gap-2">
+          <span>👨‍🍳</span> הוראות הכנה
+        </h2>
+        <ol class="space-y-3">
+          {data.steps.map((step, i) => (
+            <li>
+              <label class="flex gap-4 p-4 rounded-xl bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-800 hover:border-spice-300 dark:hover:border-spice-700 cursor-pointer transition-colors group">
+                <div class="flex flex-col items-center">
+                  <input
+                    type="checkbox"
+                    class="step-check w-5 h-5 rounded border-stone-300 text-spice-600 focus:ring-spice-500 cursor-pointer"
+                    data-id={`step-${i}`}
+                  />
+                  <span class="mt-2 w-7 h-7 rounded-full bg-spice-100 dark:bg-spice-900/50 text-spice-700 dark:text-spice-300 font-bold text-sm flex items-center justify-center group-has-[:checked]:bg-spice-600 group-has-[:checked]:text-white transition-colors">
+                    {i + 1}
+                  </span>
+                </div>
+                <div
+                  class="flex-1 leading-relaxed group-has-[:checked]:opacity-50"
+                  set:html={renderInline(step)}
+                />
+              </label>
+            </li>
+          ))}
+        </ol>
+      </section>
+    </div>
+
+    <!-- Description body content -->
+    {recipe.body && recipe.body.trim().length > 0 && (
+      <section class="mt-12 prose prose-stone dark:prose-invert max-w-none">
+        <Content />
+      </section>
+    )}
+
+    <!-- Serving / Equipment / Storage / Next time -->
+    <div class="grid md:grid-cols-2 gap-6 mt-12">
+      {data.serving && data.serving.length > 0 && (
+        <section class="rounded-2xl bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-800 p-6">
+          <h3 class="font-display text-xl font-bold mb-3 flex items-center gap-2">🍽️ הגשה</h3>
+          <ul class="space-y-2 text-sm">
+            {data.serving.map(s => <li class="flex gap-2"><span class="text-spice-500">•</span><span>{s}</span></li>)}
+          </ul>
+        </section>
+      )}
+      {data.equipment && data.equipment.length > 0 && (
+        <section class="rounded-2xl bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-800 p-6">
+          <h3 class="font-display text-xl font-bold mb-3 flex items-center gap-2">🍳 ציוד</h3>
+          <ul class="space-y-2 text-sm">
+            {data.equipment.map(s => <li class="flex gap-2"><span class="text-spice-500">•</span><span>{s}</span></li>)}
+          </ul>
+        </section>
+      )}
+      {data.storage && data.storage.length > 0 && (
+        <section class="rounded-2xl bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-800 p-6">
+          <h3 class="font-display text-xl font-bold mb-3 flex items-center gap-2">❄️ שמירה</h3>
+          <ul class="space-y-2 text-sm">
+            {data.storage.map(s => <li class="flex gap-2"><span class="text-spice-500">•</span><span>{s}</span></li>)}
+          </ul>
+        </section>
+      )}
+      {data.nextTime && data.nextTime.length > 0 && (
+        <section class="rounded-2xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900 p-6">
+          <h3 class="font-display text-xl font-bold mb-3 flex items-center gap-2">💡 לפעם הבאה</h3>
+          <ul class="space-y-2 text-sm">
+            {data.nextTime.map(s => <li class="flex gap-2"><span class="text-amber-600">•</span><span>{s}</span></li>)}
+          </ul>
+        </section>
+      )}
+    </div>
+
+    <!-- Cooking journal -->
+    {data.journal && data.journal.length > 0 && (
+      <section class="mt-12">
+        <h2 class="font-display text-2xl font-bold mb-4 flex items-center gap-2">
+          <span>📔</span> יומן בישולים
+        </h2>
+        <div class="space-y-4">
+          {data.journal.map(entry => (
+            <div class="rounded-2xl bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-800 p-5">
+              <div class="flex items-center justify-between flex-wrap gap-2 mb-3">
+                <h3 class="font-display text-lg font-bold text-spice-600">
+                  גרסה {entry.version} <span class="text-stone-400 font-normal text-sm mr-2">{entry.date}</span>
+                </h3>
+                {entry.rating !== undefined && (
+                  <span class="text-amber-500 font-bold">{'★'.repeat(Math.round(entry.rating))}<span class="text-stone-300">{'★'.repeat(10 - Math.round(entry.rating))}</span> <span class="text-stone-500 text-sm font-normal">{entry.rating}/10</span></span>
+                )}
+              </div>
+              {entry.notes && <p class="text-sm text-stone-600 dark:text-stone-300 italic">{entry.notes}</p>}
+              {entry.worked && (
+                <div class="mt-2 text-sm"><strong class="text-emerald-600">✓ מה עבד:</strong> {entry.worked}</div>
+              )}
+              {entry.improve && (
+                <div class="mt-1 text-sm"><strong class="text-amber-600">⚠ מה לשפר:</strong> {entry.improve}</div>
+              )}
+              {entry.changes && (
+                <div class="mt-1 text-sm"><strong class="text-spice-600">→ שינויים לגרסה הבאה:</strong> {entry.changes}</div>
+              )}
+            </div>
+          ))}
+        </div>
+      </section>
+    )}
+
+    <div class="mt-12 text-center print:hidden">
+      <a href="/" class="text-spice-600 hover:text-spice-700 font-medium">← חזרה לכל המתכונים</a>
+    </div>
+  </article>
+
+  <script define:vars={{ persistKey, baseServings: data.servings }}>
+    // Persist checkboxes in localStorage
+    function loadState() {
+      try { return JSON.parse(localStorage.getItem(persistKey) || '{}'); }
+      catch { return {}; }
+    }
+    function saveState(s) { localStorage.setItem(persistKey, JSON.stringify(s)); }
+    let state = loadState();
+
+    document.querySelectorAll('input[type=checkbox][data-id]').forEach((cb) => {
+      const input = cb;
+      const id = input.dataset.id;
+      if (state[id]) input.checked = true;
+      input.addEventListener('change', () => {
+        state[id] = input.checked;
+        saveState(state);
+      });
+    });
+
+    document.getElementById('reset-checks')?.addEventListener('click', () => {
+      state = {};
+      saveState(state);
+      document.querySelectorAll('input[type=checkbox][data-id]').forEach((cb) => { cb.checked = false; });
+    });
+
+    // Servings scaler
+    let current = state.__servings || baseServings;
+    const display = document.getElementById('serv-count');
+    const headerDisplay = document.getElementById('serving-display');
+    function applyScale() {
+      const factor = current / baseServings;
+      document.querySelectorAll('.ingredient-qty').forEach((el) => {
+        const base = parseFloat(el.dataset.base || '0');
+        const v = base * factor;
+        el.textContent = Number.isInteger(v) ? String(v) : v.toFixed(2).replace(/\.?0+$/, '');
+      });
+      if (display) display.textContent = String(current);
+      if (headerDisplay) headerDisplay.textContent = String(current);
+      state.__servings = current;
+      saveState(state);
+    }
+    document.getElementById('serv-inc')?.addEventListener('click', () => { current++; applyScale(); });
+    document.getElementById('serv-dec')?.addEventListener('click', () => { if (current > 1) { current--; applyScale(); } });
+    document.getElementById('serv-reset')?.addEventListener('click', () => { current = baseServings; applyScale(); });
+    if (current !== baseServings) applyScale();
+  </script>
+</Base>
+
+

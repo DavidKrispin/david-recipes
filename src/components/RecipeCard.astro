@@ -1,0 +1,54 @@
+---
+import type { CollectionEntry } from 'astro:content';
+
+interface Props {
+  recipe: CollectionEntry<'recipes'>;
+}
+const { recipe } = Astro.props;
+const { data } = recipe;
+const totalMin = (data.prepMinutes ?? 0) + (data.cookMinutes ?? 0);
+---
+<a
+  href={`/recipes/${recipe.id}`}
+  class="group block rounded-2xl overflow-hidden bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-800 shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-300"
+>
+  <div class="relative aspect-[4/3] overflow-hidden bg-gradient-to-br from-spice-100 to-spice-200 dark:from-spice-900 dark:to-stone-800 flex items-center justify-center">
+    {data.image
+      ? <img src={data.image} alt={data.title} class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
+      : <span class="text-7xl opacity-80">{data.emoji ?? '🍽️'}</span>
+    }
+    {data.tags.length > 0 && (
+      <div class="absolute top-3 right-3 flex flex-wrap gap-1.5 max-w-[80%] justify-end">
+        {data.tags.slice(0, 2).map(t => (
+          <span class="bg-white/90 dark:bg-stone-900/90 backdrop-blur text-xs font-medium px-2 py-1 rounded-full text-stone-700 dark:text-stone-200">
+            {t}
+          </span>
+        ))}
+      </div>
+    )}
+  </div>
+  <div class="p-5">
+    <h3 class="font-display font-bold text-xl group-hover:text-spice-600 transition-colors line-clamp-2">
+      {data.title}
+    </h3>
+    {data.description && (
+      <p class="mt-2 text-sm text-stone-600 dark:text-stone-400 line-clamp-2">
+        {data.description}
+      </p>
+    )}
+    <div class="mt-4 flex items-center gap-4 text-sm text-stone-500 dark:text-stone-400">
+      <span class="flex items-center gap-1">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+        {totalMin} ד׳
+      </span>
+      <span class="flex items-center gap-1">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+        {data.nutrition.calories} קק״ל
+      </span>
+      <span class="flex items-center gap-1">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"/></svg>
+        {data.servings} מנות
+      </span>
+    </div>
+  </div>
+</a>
