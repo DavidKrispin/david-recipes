@@ -8,7 +8,7 @@ on:
     branches: [main]
 
 jobs:
-  build_and_deploy:
+  build_and_deploy_job:
     if: github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.action != 'closed')
     runs-on: ubuntu-latest
     name: Build and Deploy
@@ -35,7 +35,7 @@ jobs:
           output_location: 'dist'
           skip_app_build: true
 
-  close_pull_request:
+  close_pull_request_job:
     if: github.event_name == 'pull_request' && github.event.action == 'closed'
     runs-on: ubuntu-latest
     name: Close Pull Request
