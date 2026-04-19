@@ -22,6 +22,8 @@ jobs:
           node-version: '22'
       - name: Install dependencies
         run: npm install --legacy-peer-deps
+      - name: Install API dependencies
+        run: cd api && npm install --legacy-peer-deps
       - name: Build site
         run: npm run build
       - name: Deploy
@@ -32,8 +34,10 @@ jobs:
           repo_token: ${{ secrets.GITHUB_TOKEN }}
           action: 'upload'
           app_location: '/dist'
+          api_location: '/api'
           output_location: ''
           skip_app_build: true
+          skip_api_build: true
 
   close_pull_request_job:
     if: github.event_name == 'pull_request' && github.event.action == 'closed'
