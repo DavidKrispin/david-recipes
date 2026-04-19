@@ -10,3 +10,4 @@
 .swa-token
 dist/
 node_modules/
+.github/workflows/
