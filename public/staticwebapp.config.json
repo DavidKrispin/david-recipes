@@ -1,0 +1,9 @@
+{
+  "navigationFallback": {
+    "rewrite": "/index.html",
+    "exclude": ["/api/*", "/scripts/*", "/_astro/*", "/recipes/*", "/shopping/*", "*.{css,js,json,svg,png,jpg,jpeg,ico,webp,gif,woff,woff2,ttf,eot,map,txt,xml}"]
+  },
+  "platform": {
+    "apiRuntime": "node:20"
+  }
+}

@@ -1,7 +1,12 @@
-node_modules/
-dist/
-.astro/
-.DS_Store
 *.log
+.DS_Store
+.astro/
+.contact-info*.json
+.contact-info.json
 .env
 .env.production
+.last-sync
+.local-sync-token
+.swa-token
+dist/
+node_modules/

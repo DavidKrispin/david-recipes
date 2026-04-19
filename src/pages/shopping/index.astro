@@ -1,0 +1,310 @@
+---
+import Base from '../../layouts/Base.astro';
+---
+<Base title="רשימת קניות · המתכונים של דוד" description="רשימות קניות לפי חנות">
+  <section class="bg-gradient-to-bl from-emerald-500 via-emerald-600 to-emerald-800 text-white print:hidden">
+    <div class="max-w-4xl mx-auto px-4 py-10 md:py-14">
+      <div class="flex items-center gap-3 mb-2">
+        <span class="text-4xl md:text-5xl">🛒</span>
+        <h1 class="font-display text-3xl md:text-5xl font-bold">רשימת קניות</h1>
+      </div>
+      <p class="mt-2 text-emerald-100 max-w-2xl">
+        הכל מאורגן לפי חנות. הוסף פריטים ידנית או ממתכונים, סמן ✓ כשקונים, והדפס לפני שיוצאים.
+      </p>
+    </div>
+  </section>
+
+  <section class="max-w-4xl mx-auto px-4 py-8">
+    <!-- Add new store -->
+    <div class="rounded-2xl bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-800 p-4 mb-6 print:hidden">
+      <form id="new-store-form" class="flex gap-2">
+        <input
+          id="new-store-name"
+          type="text"
+          placeholder="שם חנות חדשה (למשל: שופרסל, שוק, פארם...)"
+          class="flex-1 px-3 py-2 rounded-lg border border-stone-200 dark:border-stone-700 bg-white dark:bg-stone-950 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+        />
+        <button type="submit" class="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold whitespace-nowrap">
+          ➕ הוסף חנות
+        </button>
+      </form>
+    </div>
+
+    <!-- Print-all -->
+    <div class="flex justify-end mb-4 print:hidden">
+      <button onclick="window.print()" class="px-4 py-2 rounded-xl border border-stone-200 dark:border-stone-700 hover:bg-stone-50 dark:hover:bg-stone-800 text-sm font-medium">
+        🖨️ הדפסה
+      </button>
+    </div>
+
+    <div id="stores-container" class="space-y-4">
+      <!-- Filled by JS -->
+    </div>
+
+    <div id="empty-state" class="hidden text-center py-12 text-stone-500 dark:text-stone-400">
+      <div class="text-6xl mb-3">🛒</div>
+      <p>הרשימה ריקה. הוסף פריטים ממתכון, או הקלד ידנית למעלה.</p>
+    </div>
+  </section>
+
+  <template id="store-card-template">
+    <details class="store-card group rounded-2xl bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-800 overflow-hidden print:open" open>
+      <summary class="px-5 py-4 cursor-pointer flex items-center justify-between gap-3 hover:bg-stone-50 dark:hover:bg-stone-800/50 list-none [&::-webkit-details-marker]:hidden">
+        <div class="flex items-center gap-3 flex-1 min-w-0">
+          <svg class="w-5 h-5 text-stone-400 transition-transform group-open:rotate-90 shrink-0 print:hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+          <span class="text-2xl shrink-0">🏪</span>
+          <div class="min-w-0 flex-1">
+            <div class="store-name-display flex items-center gap-2">
+              <h2 class="store-name font-display text-xl font-bold truncate"></h2>
+              <span class="store-default-badge hidden text-xs font-medium px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-900/50 dark:text-emerald-200">ברירת מחדל</span>
+            </div>
+            <input class="store-name-input hidden w-full px-2 py-1 rounded border border-stone-300 dark:border-stone-600 bg-white dark:bg-stone-950 text-base font-bold" type="text" />
+            <div class="store-stats text-xs text-stone-500 dark:text-stone-400 mt-0.5"></div>
+          </div>
+        </div>
+        <div class="flex items-center gap-1 print:hidden" onclick="event.stopPropagation()">
+          <button class="store-rename-btn p-2 rounded-lg hover:bg-stone-100 dark:hover:bg-stone-800" title="שנה שם" type="button">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
+          </button>
+          <button class="store-delete-btn p-2 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/30 text-red-600" title="מחק חנות" type="button">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6M1 7h22M9 7V4a1 1 0 011-1h4a1 1 0 011 1v3"/></svg>
+          </button>
+        </div>
+      </summary>
+      <div class="border-t border-stone-100 dark:border-stone-800 px-5 py-4">
+        <form class="add-item-form flex gap-2 mb-4 print:hidden">
+          <input type="text" class="add-item-input flex-1 px-3 py-2 rounded-lg border border-stone-200 dark:border-stone-700 bg-white dark:bg-stone-950 focus:outline-none focus:ring-2 focus:ring-emerald-500 text-sm" placeholder="הוסף פריט (למשל: חלב 2 ליטר)" />
+          <button type="submit" class="px-3 py-2 rounded-lg bg-stone-900 dark:bg-stone-100 text-white dark:text-stone-900 text-sm font-bold whitespace-nowrap">הוסף</button>
+        </form>
+        <ul class="store-items space-y-1"></ul>
+        <div class="store-empty hidden text-sm text-stone-400 py-4 text-center">אין פריטים בחנות זו עדיין.</div>
+        <div class="flex flex-wrap gap-2 mt-4 pt-3 border-t border-stone-100 dark:border-stone-800 print:hidden">
+          <button class="clear-bought-btn text-xs px-3 py-1.5 rounded-lg border border-stone-200 dark:border-stone-700 hover:bg-stone-50 dark:hover:bg-stone-800" type="button">
+            ✓ נקה קנויים
+          </button>
+          <button class="clear-all-btn text-xs px-3 py-1.5 rounded-lg border border-red-200 dark:border-red-900 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30" type="button">
+            🗑️ נקה הכל
+          </button>
+        </div>
+      </div>
+    </details>
+  </template>
+
+  <template id="item-template">
+    <li class="store-item group flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-stone-50 dark:hover:bg-stone-800/40 transition-colors">
+      <input type="checkbox" class="item-check w-4 h-4 rounded border-stone-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer shrink-0" />
+      <div class="flex-1 min-w-0 text-sm leading-relaxed item-text transition-all">
+        <span class="item-qty font-bold text-spice-700 dark:text-spice-300 ml-1"></span>
+        <span class="item-name"></span>
+        <span class="item-note hidden text-xs text-stone-500 dark:text-stone-400 mr-1"></span>
+        <span class="item-source hidden text-[10px] text-stone-400 dark:text-stone-500 mr-2 print:hidden"></span>
+      </div>
+      <button class="item-remove opacity-0 group-hover:opacity-100 focus:opacity-100 text-stone-400 hover:text-red-600 p-1 print:hidden" title="הסר" type="button">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+      </button>
+    </li>
+  </template>
+
+  <div id="shopping-toast" class="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 hidden bg-emerald-600 text-white px-4 py-2 rounded-xl shadow-lg text-sm font-medium"></div>
+
+  <style is:global>
+    .store-item .item-check:checked ~ .item-text { text-decoration: line-through; opacity: 0.5; }
+    .store-item .item-check { transition: transform 0.15s ease; }
+    .store-item .item-check:checked { transform: scale(1.1); }
+    @media print {
+      .store-card { break-inside: avoid; border-color: #ccc !important; }
+      details { display: block !important; }
+      details > summary { list-style: none; }
+      .store-item .item-check:checked ~ .item-text { text-decoration: line-through; opacity: 0.5; color: #888; }
+    }
+  </style>
+
+  <script is:inline>
+    (function () {
+      function waitForSL(cb) {
+        if (window.ShoppingLists) return cb();
+        // shopping.js loads after this inline script; wait for it
+        var t = setInterval(function () {
+          if (window.ShoppingLists) { clearInterval(t); cb(); }
+        }, 20);
+      }
+      waitForSL(init);
+      function init() {
+      const SL = window.ShoppingLists;
+      const container = document.getElementById('stores-container');
+      const emptyState = document.getElementById('empty-state');
+      const toast = document.getElementById('shopping-toast');
+      const cardTpl = document.getElementById('store-card-template');
+      const itemTpl = document.getElementById('item-template');
+
+      function showToast(msg) {
+        toast.textContent = msg;
+        toast.classList.remove('hidden');
+        clearTimeout(showToast._t);
+        showToast._t = setTimeout(() => toast.classList.add('hidden'), 1800);
+      }
+
+      function fmtQty(q) {
+        if (q == null) return '';
+        if (Number.isInteger(q)) return String(q);
+        return q.toFixed(2).replace(/\.?0+$/, '');
+      }
+
+      // Track which stores are open across re-renders.
+      const openStores = new Set();
+
+      function render() {
+        const stores = SL.getStores();
+        // Capture currently-open detail elements before wipe
+        container.querySelectorAll('details.store-card').forEach((d) => {
+          const id = d.dataset.storeId;
+          if (id && d.open) openStores.add(id); else if (id) openStores.delete(id);
+        });
+
+        container.innerHTML = '';
+        const totalItems = stores.reduce((n, s) => n + s.items.length, 0);
+        emptyState.classList.toggle('hidden', totalItems > 0 || stores.length > 1);
+
+        stores.forEach((store) => {
+          const node = cardTpl.content.firstElementChild.cloneNode(true);
+          node.dataset.storeId = store.id;
+          // First load: open by default; afterwards respect openStores set
+          if (openStores.size > 0) {
+            node.open = openStores.has(store.id);
+          }
+          const remaining = store.items.filter((i) => !i.bought).length;
+          node.querySelector('.store-name').textContent = store.name;
+          if (store.isDefault) node.querySelector('.store-default-badge').classList.remove('hidden');
+          node.querySelector('.store-stats').textContent =
+            store.items.length === 0
+              ? 'אין פריטים'
+              : `${remaining} נותרו · ${store.items.length} סה״כ`;
+
+          // Delete button
+          const delBtn = node.querySelector('.store-delete-btn');
+          if (store.isDefault) {
+            delBtn.classList.add('hidden');
+          } else {
+            delBtn.addEventListener('click', () => {
+              if (confirm(`למחוק את החנות "${store.name}" וכל הפריטים שבה?`)) {
+                SL.deleteStore(store.id);
+                showToast('נמחקה');
+              }
+            });
+          }
+
+          // Rename
+          const nameDisplay = node.querySelector('.store-name-display');
+          const nameInput = node.querySelector('.store-name-input');
+          const renameBtn = node.querySelector('.store-rename-btn');
+          renameBtn.addEventListener('click', () => {
+            nameInput.value = store.name;
+            nameDisplay.classList.add('hidden');
+            nameInput.classList.remove('hidden');
+            nameInput.focus();
+            nameInput.select();
+          });
+          function commitRename() {
+            const v = nameInput.value.trim();
+            if (v && v !== store.name) {
+              SL.renameStore(store.id, v);
+            } else {
+              nameInput.classList.add('hidden');
+              nameDisplay.classList.remove('hidden');
+            }
+          }
+          nameInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') { e.preventDefault(); commitRename(); }
+            if (e.key === 'Escape') { nameInput.classList.add('hidden'); nameDisplay.classList.remove('hidden'); }
+          });
+          nameInput.addEventListener('blur', commitRename);
+          nameInput.addEventListener('click', (e) => e.stopPropagation());
+
+          // Add manual item
+          const form = node.querySelector('.add-item-form');
+          const input = node.querySelector('.add-item-input');
+          form.addEventListener('submit', (e) => {
+            e.preventDefault();
+            const v = input.value.trim();
+            if (!v) return;
+            SL.addManualItem(store.id, v);
+            input.value = '';
+            input.focus();
+          });
+
+          // Items
+          const ul = node.querySelector('.store-items');
+          const empty = node.querySelector('.store-empty');
+          if (store.items.length === 0) {
+            empty.classList.remove('hidden');
+          } else {
+            // Sort: unbought first, then bought
+            const sorted = store.items.slice().sort((a, b) => {
+              if (a.bought !== b.bought) return a.bought ? 1 : -1;
+              return a.addedAt.localeCompare(b.addedAt);
+            });
+            sorted.forEach((item) => {
+              const li = itemTpl.content.firstElementChild.cloneNode(true);
+              const check = li.querySelector('.item-check');
+              check.checked = item.bought;
+              check.addEventListener('change', () => {
+                SL.toggleItem(store.id, item.id);
+              });
+              const qtyEl = li.querySelector('.item-qty');
+              if (item.qty != null) {
+                qtyEl.textContent = fmtQty(item.qty) + (item.unit ? ' ' + item.unit : '');
+              } else {
+                qtyEl.classList.add('hidden');
+              }
+              li.querySelector('.item-name').textContent = item.name;
+              if (item.note) {
+                const ne = li.querySelector('.item-note');
+                ne.textContent = '(' + item.note + ')';
+                ne.classList.remove('hidden');
+              }
+              if (item.source && item.source !== 'manual') {
+                const se = li.querySelector('.item-source');
+                se.textContent = '· ' + item.source;
+                se.classList.remove('hidden');
+              }
+              li.querySelector('.item-remove').addEventListener('click', () => {
+                SL.removeItem(store.id, item.id);
+              });
+              ul.appendChild(li);
+            });
+          }
+
+          // Footer buttons
+          node.querySelector('.clear-bought-btn').addEventListener('click', () => {
+            SL.clearBought(store.id);
+          });
+          node.querySelector('.clear-all-btn').addEventListener('click', () => {
+            if (store.items.length === 0) return;
+            if (confirm(`לנקות את כל הפריטים בחנות "${store.name}"?`)) {
+              SL.clearAll(store.id);
+            }
+          });
+
+          container.appendChild(node);
+        });
+      }
+
+      // New store form
+      const newStoreForm = document.getElementById('new-store-form');
+      const newStoreName = document.getElementById('new-store-name');
+      newStoreForm.addEventListener('submit', (e) => {
+        e.preventDefault();
+        const v = newStoreName.value.trim();
+        if (!v) return;
+        const id = SL.addStore(v);
+        if (id) openStores.add(id);
+        newStoreName.value = '';
+        showToast('נוספה חנות');
+      });
+
+      window.addEventListener('shopping-lists:change', render);
+      render();
+      } // end init
+    })();
+  </script>
+</Base>

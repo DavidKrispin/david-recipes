@@ -1,0 +1,184 @@
+---
+import Base from '../../layouts/Base.astro';
+---
+<Base title="ניהול משתמשים · המתכונים של דוד" description="ניהול חברי המשפחה וגישה לרשימת הקניות">
+  <section class="bg-gradient-to-bl from-indigo-500 via-indigo-600 to-indigo-800 text-white print:hidden">
+    <div class="max-w-4xl mx-auto px-4 py-10 md:py-14">
+      <div class="flex items-center gap-3 mb-2">
+        <span class="text-4xl md:text-5xl">👥</span>
+        <h1 class="font-display text-3xl md:text-5xl font-bold">ניהול משתמשים</h1>
+      </div>
+      <p class="mt-2 text-indigo-100 max-w-2xl">
+        חברי המשפחה רואים ועורכים את אותן רשימות הקניות. הזמן בני בית לפי כתובת אימייל של חשבון Google.
+      </p>
+    </div>
+  </section>
+
+  <section class="max-w-4xl mx-auto px-4 py-8 space-y-6">
+    <div id="settings-loading" class="text-center py-12 text-stone-500 dark:text-stone-400">
+      טוען...
+    </div>
+
+    <div id="settings-content" class="hidden space-y-6">
+      <div class="rounded-2xl bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-800 p-5">
+        <div class="flex items-center justify-between mb-4">
+          <h2 class="font-display text-xl font-bold">המשפחה שלך</h2>
+          <span id="household-name" class="text-sm text-stone-500 dark:text-stone-400"></span>
+        </div>
+        <div id="members-list" class="divide-y divide-stone-100 dark:divide-stone-800"></div>
+      </div>
+
+      <div id="invite-section" class="hidden rounded-2xl bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-800 p-5">
+        <h2 class="font-display text-xl font-bold mb-3">הזמנת בן/בת משפחה</h2>
+        <p class="text-sm text-stone-500 dark:text-stone-400 mb-4">
+          הזן כתובת אימייל של חשבון Google. ההזמנה תופעל אוטומטית כשהאדם יתחבר לאתר בפעם הראשונה.
+        </p>
+        <form id="invite-form" class="flex flex-col sm:flex-row gap-2">
+          <input
+            id="invite-email"
+            type="email"
+            required
+            placeholder="example@gmail.com"
+            class="flex-1 px-3 py-2 rounded-lg border border-stone-200 dark:border-stone-700 bg-white dark:bg-stone-950 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            dir="ltr"
+          />
+          <button type="submit" class="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-bold whitespace-nowrap">
+            ➕ הזמן
+          </button>
+        </form>
+        <div id="invite-msg" class="mt-3 text-sm hidden"></div>
+      </div>
+
+      <div id="not-owner-note" class="hidden rounded-2xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 p-4 text-sm text-amber-800 dark:text-amber-200">
+        רק בעל/ת הבית יכול להוסיף או להסיר חברים. דברו איתו/ה כדי לעדכן את הרשימה.
+      </div>
+    </div>
+  </section>
+
+  <script is:inline>
+    (function () {
+      function ready() {
+        const loading = document.getElementById('settings-loading');
+        const content = document.getElementById('settings-content');
+        const nameEl = document.getElementById('household-name');
+        const membersList = document.getElementById('members-list');
+        const inviteSection = document.getElementById('invite-section');
+        const notOwnerNote = document.getElementById('not-owner-note');
+        const inviteForm = document.getElementById('invite-form');
+        const inviteEmail = document.getElementById('invite-email');
+        const inviteMsg = document.getElementById('invite-msg');
+
+        async function refresh() {
+          if (!window.Auth || !window.Auth.isAuthenticated()) return;
+          loading.classList.remove('hidden');
+          content.classList.add('hidden');
+          try {
+            const res = await window.Auth.apiFetch('/api/user');
+            if (!res.ok) throw new Error('HTTP ' + res.status);
+            const data = await res.json();
+            render(data);
+          } catch (e) {
+            loading.textContent = 'שגיאה בטעינה: ' + (e.message || e);
+          }
+        }
+
+        function showMsg(text, ok) {
+          inviteMsg.textContent = text;
+          inviteMsg.className = 'mt-3 text-sm ' + (ok
+            ? 'text-emerald-600 dark:text-emerald-400'
+            : 'text-rose-600 dark:text-rose-400');
+          inviteMsg.classList.remove('hidden');
+        }
+
+        function render(data) {
+          loading.classList.add('hidden');
+          content.classList.remove('hidden');
+          nameEl.textContent = (data.household && data.household.name) || '';
+          const isOwner = data.user.role === 'owner';
+
+          membersList.innerHTML = '';
+          (data.members || []).forEach((m) => {
+            const row = document.createElement('div');
+            row.className = 'flex items-center gap-3 py-3';
+            const isCurrentUser = m.email === data.user.email;
+            row.innerHTML = `
+              <img class="w-10 h-10 rounded-full bg-stone-200 dark:bg-stone-700" referrerpolicy="no-referrer" ${m.picture ? `src="${m.picture}"` : ''} alt="" />
+              <div class="flex-1 min-w-0">
+                <div class="font-medium truncate">${escapeHtml(m.name || m.email)} ${isCurrentUser ? '<span class="text-xs text-stone-400">(אתה)</span>' : ''}</div>
+                <div class="text-xs text-stone-500 dark:text-stone-400 truncate" dir="ltr">${escapeHtml(m.email)}</div>
+              </div>
+              <span class="text-xs px-2 py-1 rounded-full ${m.role === 'owner' ? 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200' : 'bg-stone-100 text-stone-700 dark:bg-stone-800 dark:text-stone-300'}">
+                ${m.role === 'owner' ? '👑 בעל/ת הבית' : 'חבר/ה'}
+              </span>
+              ${isOwner && !isCurrentUser ? `<button data-email="${escapeAttr(m.email)}" class="remove-btn text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-900/30 px-2 py-1 rounded-md text-sm">הסר</button>` : ''}
+            `;
+            membersList.appendChild(row);
+          });
+
+          if (isOwner) {
+            inviteSection.classList.remove('hidden');
+            notOwnerNote.classList.add('hidden');
+          } else {
+            inviteSection.classList.add('hidden');
+            notOwnerNote.classList.remove('hidden');
+          }
+
+          // Wire remove buttons
+          membersList.querySelectorAll('.remove-btn').forEach((b) => {
+            b.addEventListener('click', async () => {
+              const email = b.getAttribute('data-email');
+              if (!confirm('להסיר את ' + email + ' מהמשפחה?')) return;
+              try {
+                const res = await window.Auth.apiFetch('/api/household/member?email=' + encodeURIComponent(email), { method: 'DELETE' });
+                if (!res.ok) throw new Error('HTTP ' + res.status);
+                refresh();
+              } catch (e) { alert('שגיאה: ' + e.message); }
+            });
+          });
+        }
+
+        inviteForm?.addEventListener('submit', async (e) => {
+          e.preventDefault();
+          inviteMsg.classList.add('hidden');
+          const email = (inviteEmail.value || '').trim();
+          if (!email) return;
+          try {
+            const res = await window.Auth.apiFetch('/api/household/invite', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ email }),
+            });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) {
+              showMsg(data.error || ('HTTP ' + res.status), false);
+              return;
+            }
+            if (data.alreadyMember) {
+              showMsg('כבר חבר/ה במשפחה.', true);
+            } else {
+              showMsg('הזמנה נשלחה ל־' + email + '. ההצטרפות תושלם בפעם הראשונה שיתחבר/ת.', true);
+            }
+            inviteEmail.value = '';
+            refresh();
+          } catch (e) { showMsg('שגיאה: ' + e.message, false); }
+        });
+
+        function escapeHtml(s) {
+          return String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+        }
+        function escapeAttr(s) { return escapeHtml(s); }
+
+        // Refresh when auth changes
+        window.addEventListener('auth:change', () => {
+          if (window.Auth?.isAuthenticated()) refresh();
+        });
+        if (window.Auth?.isAuthenticated()) refresh();
+      }
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', ready);
+      } else {
+        ready();
+      }
+    })();
+  </script>
+</Base>

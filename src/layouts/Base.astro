@@ -40,28 +40,95 @@ const { title, description = "ספר המתכונים של דוד" } = Astro.pro
             המתכונים של דוד
           </span>
         </a>
-        <button
-          id="theme-toggle"
-          aria-label="החלף מצב כהה"
-          class="p-2 rounded-lg hover:bg-stone-100 dark:hover:bg-stone-800 transition-colors"
-        >
+        <div class="flex items-center gap-1">
+          <!-- Auth UI: signed-out shows nothing here (login button is on body), signed-in shows avatar -->
+          <div id="auth-user-chip" class="hidden relative">
+            <button
+              id="auth-user-btn"
+              class="flex items-center gap-2 px-2 py-1 rounded-lg hover:bg-stone-100 dark:hover:bg-stone-800 transition-colors text-sm"
+              aria-haspopup="menu"
+              aria-expanded="false"
+            >
+              <img id="auth-user-avatar" alt="" class="w-7 h-7 rounded-full bg-stone-200 dark:bg-stone-700" referrerpolicy="no-referrer" />
+              <span id="auth-user-name" class="hidden md:inline font-medium max-w-[8rem] truncate"></span>
+              <svg class="w-3 h-3 opacity-60" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+            </button>
+            <div
+              id="auth-user-menu"
+              role="menu"
+              class="hidden absolute end-0 mt-2 w-56 rounded-xl bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 shadow-lg overflow-hidden z-50"
+            >
+              <div class="px-4 py-3 border-b border-stone-100 dark:border-stone-800">
+                <div id="auth-menu-name" class="font-medium text-sm truncate"></div>
+                <div id="auth-menu-email" class="text-xs text-stone-500 dark:text-stone-400 truncate"></div>
+              </div>
+              <a href="/settings/" class="flex items-center gap-2 px-4 py-2 text-sm hover:bg-stone-50 dark:hover:bg-stone-800" role="menuitem">
+                <span>👥</span>
+                <span>ניהול משתמשים</span>
+              </a>
+              <button id="auth-signout" class="w-full text-right flex items-center gap-2 px-4 py-2 text-sm hover:bg-stone-50 dark:hover:bg-stone-800 text-rose-600 dark:text-rose-400" role="menuitem">
+                <span>🚪</span>
+                <span>התנתקות</span>
+              </button>
+            </div>
+          </div>
+          <span
+            id="sync-indicator"
+            class="hidden sm:inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium"
+            title="מצב סנכרון ענן"
+            aria-label="מצב סנכרון"
+          ></span>
+          <a
+            href="/shopping/"
+            class="relative flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-stone-100 dark:hover:bg-stone-800 transition-colors text-sm font-medium"
+            aria-label="רשימת קניות"
+          >
+            <span class="text-xl leading-none">🛒</span>
+            <span class="hidden sm:inline">רשימת קניות</span>
+            <span
+              id="shopping-badge"
+              class="hidden absolute -top-1 -left-1 sm:static sm:translate-x-0 min-w-[1.25rem] h-5 px-1 rounded-full bg-spice-600 text-white text-xs font-bold items-center justify-center leading-none"
+            >0</span>
+          </a>
+          <button
+            id="theme-toggle"
+            aria-label="החלף מצב כהה"
+            class="p-2 rounded-lg hover:bg-stone-100 dark:hover:bg-stone-800 transition-colors"
+          >
           <svg class="w-5 h-5 hidden dark:block" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"/>
           </svg>
           <svg class="w-5 h-5 dark:hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/>
           </svg>
-        </button>
+          </button>
+        </div>
       </div>
     </header>
 
     <main class="flex-1">
-      <slot />
+      <!-- Login overlay: shown until authenticated -->
+      <div id="auth-gate" class="hidden fixed inset-0 z-50 bg-stone-50/95 dark:bg-stone-950/95 backdrop-blur flex items-center justify-center p-6">
+        <div class="max-w-md w-full text-center bg-white dark:bg-stone-900 rounded-2xl border border-stone-200 dark:border-stone-800 shadow-xl p-8">
+          <div class="text-5xl mb-3">📖</div>
+          <h2 class="font-display text-2xl font-bold mb-2">המתכונים של דוד</h2>
+          <p class="text-stone-600 dark:text-stone-400 mb-6 text-sm">
+            כדי לראות את המתכונים ורשימות הקניות, התחבר עם חשבון Google.
+          </p>
+          <div id="auth-button-mount" class="flex justify-center"></div>
+          <p class="mt-6 text-xs text-stone-400">
+            רק חברי משק הבית רואים את הרשימות שלכם.
+          </p>
+        </div>
+      </div>
+      <div id="auth-content">
+        <slot />
+      </div>
     </main>
 
     <footer class="mt-16 py-8 border-t border-stone-200 dark:border-stone-800 text-center text-sm text-stone-500 dark:text-stone-400 print:hidden">
       <div class="max-w-6xl mx-auto px-4">
-        <p>נבנה באהבה עבור דוד 🦊 · Astro + Tailwind</p>
+        <p>נבנה באהבה עבור דוד 🦊 · Astro + Tailwind · <span class="opacity-50">v3.0</span></p>
       </div>
     </footer>
 
@@ -71,6 +138,118 @@ const { title, description = "ספר המתכונים של דוד" } = Astro.pro
         const isDark = document.documentElement.classList.toggle('dark');
         localStorage.setItem('theme', isDark ? 'dark' : 'light');
       });
+    </script>
+
+    <script src="/scripts/auth.js?v=3.0.1" is:inline></script>
+    <script src="/scripts/shopping.js?v=3.0.1" is:inline></script>
+    <script is:inline>
+      // Auth-gate UI wiring
+      (function () {
+        const gate = document.getElementById('auth-gate');
+        const content = document.getElementById('auth-content');
+        const chip = document.getElementById('auth-user-chip');
+        const avatar = document.getElementById('auth-user-avatar');
+        const nameEl = document.getElementById('auth-user-name');
+        const menu = document.getElementById('auth-user-menu');
+        const btn = document.getElementById('auth-user-btn');
+        const menuName = document.getElementById('auth-menu-name');
+        const menuEmail = document.getElementById('auth-menu-email');
+        const signoutBtn = document.getElementById('auth-signout');
+        const mount = document.getElementById('auth-button-mount');
+
+        function applyState(state) {
+          if (state && window.Auth && window.Auth.isAuthenticated()) {
+            gate?.classList.add('hidden');
+            content?.classList.remove('hidden');
+            chip?.classList.remove('hidden');
+            const u = state.user;
+            if (avatar) {
+              if (u.picture) { avatar.src = u.picture; avatar.alt = u.name || u.email; }
+              else { avatar.removeAttribute('src'); avatar.alt = ''; }
+            }
+            if (nameEl) nameEl.textContent = u.name || u.email;
+            if (menuName) menuName.textContent = u.name || '';
+            if (menuEmail) menuEmail.textContent = u.email || '';
+          } else {
+            gate?.classList.remove('hidden');
+            content?.classList.add('hidden');
+            chip?.classList.add('hidden');
+            if (mount && window.Auth) {
+              window.Auth.renderButton(mount).catch(() => {
+                mount.innerHTML = '<div class="text-sm text-rose-500">לא ניתן לטעון את כפתור ההתחברות. בדוק חיבור לאינטרנט.</div>';
+              });
+            }
+          }
+        }
+
+        btn?.addEventListener('click', (e) => {
+          e.stopPropagation();
+          menu?.classList.toggle('hidden');
+          btn.setAttribute('aria-expanded', String(!menu?.classList.contains('hidden')));
+        });
+        document.addEventListener('click', (e) => {
+          if (!menu?.contains(e.target) && e.target !== btn) {
+            menu?.classList.add('hidden');
+            btn?.setAttribute('aria-expanded', 'false');
+          }
+        });
+        signoutBtn?.addEventListener('click', () => {
+          window.Auth?.signOut();
+          menu?.classList.add('hidden');
+        });
+
+        if (window.Auth) {
+          window.Auth.onChange(applyState);
+        } else {
+          // Auth script not loaded yet; gate is hidden by default — show it.
+          gate?.classList.remove('hidden');
+          content?.classList.add('hidden');
+        }
+      })();
+    </script>
+    <script is:inline>
+      (function () {
+        function refreshBadge() {
+          var badge = document.getElementById('shopping-badge');
+          if (!badge || !window.ShoppingLists) return;
+          var n = window.ShoppingLists.totalUnchecked();
+          if (n > 0) {
+            badge.textContent = n > 99 ? '99+' : String(n);
+            badge.classList.remove('hidden');
+            badge.classList.add('inline-flex');
+          } else {
+            badge.classList.add('hidden');
+            badge.classList.remove('inline-flex');
+          }
+        }
+        refreshBadge();
+        window.addEventListener('shopping-lists:change', refreshBadge);
+      })();
+    </script>
+    <script is:inline>
+      (function () {
+        const el = document.getElementById('sync-indicator');
+        if (!el) return;
+        const styles = {
+          syncing: { text: '⟳ מסנכרן', cls: 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200' },
+          synced:  { text: '✓ מסונכרן', cls: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-200' },
+          offline: { text: '⚠ לא מקוון', cls: 'bg-stone-200 text-stone-700 dark:bg-stone-800 dark:text-stone-300' },
+          idle:    { text: '', cls: '' },
+        };
+        let hideTimer = null;
+        function apply(state) {
+          const s = styles[state] || styles.idle;
+          el.className = 'hidden sm:inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium ' + s.cls;
+          el.textContent = s.text;
+          if (!s.text) { el.classList.add('hidden'); return; }
+          el.classList.remove('hidden');
+          if (hideTimer) { clearTimeout(hideTimer); hideTimer = null; }
+          if (state === 'synced') {
+            hideTimer = setTimeout(() => { el.classList.add('hidden'); }, 2500);
+          }
+        }
+        window.addEventListener('shopping-lists:sync', (e) => apply(e.detail && e.detail.state));
+      })();
     </script>
 
     <style is:global>

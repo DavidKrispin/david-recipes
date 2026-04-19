@@ -329,15 +329,11 @@ function syncRecipes() {
     const srcContent = fs.readFileSync(srcPath, 'utf8');
     const srcMtime = fs.statSync(srcPath).mtimeMs;
 
-    // Check if dest exists and is newer
-    if (fs.existsSync(destPath)) {
-      const destMtime = fs.statSync(destPath).mtimeMs;
-      // If source hasn't changed since last sync, skip
-      const syncMarker = path.join(SITE_ROOT, '.last-sync');
-      if (fs.existsSync(syncMarker)) {
-        const lastSync = fs.statSync(syncMarker).mtimeMs;
-        if (srcMtime < lastSync) continue;
-      }
+    // If source hasn't changed since last sync, skip
+    const syncMarker = path.join(SITE_ROOT, '.last-sync');
+    if (fs.existsSync(syncMarker)) {
+      const lastSync = fs.statSync(syncMarker).mtimeMs;
+      if (srcMtime < lastSync) continue;
     }
 
     // Check if source already has frontmatter (already in Astro format)
@@ -347,6 +343,16 @@ function syncRecipes() {
       console.log(`📋 Copied (already formatted): ${file}`);
       changed = true;
       continue;
+    }
+
+    // If dest already exists with good frontmatter, and source is plain markdown,
+    // DON'T overwrite — the dest was hand-crafted or previously converted with better data
+    if (fs.existsSync(destPath)) {
+      const destContent = fs.readFileSync(destPath, 'utf8');
+      if (destContent.startsWith('---') && destContent.includes('nutrition:')) {
+        console.log(`⏭️  Skipping ${file} — dest already has rich frontmatter`);
+        continue;
+      }
     }
 
     // Parse and convert

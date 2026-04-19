@@ -45,6 +45,18 @@ function renderInline(s: string): string {
 }
 
 const persistKey = `recipe:${recipe.id}`;
+
+// Flat list of ingredients passed to the client for the shopping modal.
+const shoppingIngredients = data.ingredientGroups.flatMap((group) =>
+  group.items.map((item) => ({
+    name: item.name,
+    qty: item.qty ?? null,
+    unit: item.unit ?? '',
+    note: item.note ?? '',
+    scalable: item.scalable !== false,
+    group: group.title,
+  }))
+);
 ---
 <Base title={`${data.title} · המתכונים של דוד`} description={data.description}>
   <article class="max-w-4xl mx-auto px-4 py-8 print:py-2">
@@ -169,6 +181,9 @@ const persistKey = `recipe:${recipe.id}`;
         <button id="serv-reset" class="text-xs text-stone-500 hover:text-spice-600 mr-2">איפוס</button>
       </div>
       <div class="flex gap-2">
+        <button id="open-shopping-modal" class="px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-medium flex items-center gap-2">
+          🛒 הוסף לרשימת קניות
+        </button>
         <button id="reset-checks" class="px-4 py-2.5 rounded-xl bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 hover:bg-stone-50 dark:hover:bg-stone-800 text-sm font-medium">
           ↺ אפס סימונים
         </button>
@@ -333,7 +348,47 @@ const persistKey = `recipe:${recipe.id}`;
     </div>
   </article>
 
-  <script define:vars={{ persistKey, baseServings: data.servings }}>
+  <!-- Shopping list modal -->
+  <div
+    id="shopping-modal"
+    class="fixed inset-0 z-50 hidden items-center justify-center p-4 bg-stone-900/60 backdrop-blur-sm print:hidden"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="shopping-modal-title"
+  >
+    <div class="bg-white dark:bg-stone-900 rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col border border-stone-200 dark:border-stone-800">
+      <div class="p-5 border-b border-stone-200 dark:border-stone-800 flex items-center justify-between gap-3">
+        <h3 id="shopping-modal-title" class="font-display text-xl font-bold flex items-center gap-2">
+          🛒 הוסף לרשימת קניות
+        </h3>
+        <button id="shopping-modal-close" aria-label="סגור" class="p-2 rounded-lg hover:bg-stone-100 dark:hover:bg-stone-800">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+        </button>
+      </div>
+      <div class="p-5 border-b border-stone-200 dark:border-stone-800">
+        <label for="shopping-modal-store" class="block text-sm font-medium text-stone-600 dark:text-stone-300 mb-1.5">חנות</label>
+        <select id="shopping-modal-store" class="w-full px-3 py-2 rounded-lg border border-stone-200 dark:border-stone-700 bg-white dark:bg-stone-950 focus:outline-none focus:ring-2 focus:ring-spice-500"></select>
+      </div>
+      <div class="flex items-center justify-between px-5 pt-4 pb-2 text-sm text-stone-500 dark:text-stone-400">
+        <span><span id="shopping-modal-count">0</span> רכיבים נבחרו</span>
+        <div class="flex gap-3">
+          <button id="shopping-modal-all" type="button" class="text-spice-600 hover:underline">בחר הכל</button>
+          <button id="shopping-modal-none" type="button" class="text-stone-500 hover:underline">נקה</button>
+        </div>
+      </div>
+      <div id="shopping-modal-items" class="flex-1 overflow-y-auto px-5 pb-4 space-y-1"></div>
+      <div class="p-5 border-t border-stone-200 dark:border-stone-800 flex items-center justify-end gap-2">
+        <button id="shopping-modal-cancel" class="px-4 py-2 rounded-xl border border-stone-200 dark:border-stone-700 hover:bg-stone-50 dark:hover:bg-stone-800 text-sm font-medium">ביטול</button>
+        <button id="shopping-modal-add" class="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold">הוסף</button>
+      </div>
+    </div>
+  </div>
+  <div
+    id="shopping-toast"
+    class="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 hidden bg-emerald-600 text-white px-4 py-2 rounded-xl shadow-lg text-sm font-medium"
+  ></div>
+
+  <script define:vars={{ persistKey, baseServings: data.servings, shoppingIngredients, recipeSlug: recipe.id, recipeTitle: data.title }}>
     // Persist checkboxes in localStorage
     function loadState() {
       try { return JSON.parse(localStorage.getItem(persistKey) || '{}'); }
@@ -378,6 +433,112 @@ const persistKey = `recipe:${recipe.id}`;
     document.getElementById('serv-dec')?.addEventListener('click', () => { if (current > 1) { current--; applyScale(); } });
     document.getElementById('serv-reset')?.addEventListener('click', () => { current = baseServings; applyScale(); });
     if (current !== baseServings) applyScale();
+
+    // ---------- Shopping list modal ----------
+    function getCurrentServings() { return current; }
+    function fmtQtyClient(q) {
+      if (q == null) return '';
+      if (Number.isInteger(q)) return String(q);
+      return q.toFixed(2).replace(/\.?0+$/, '');
+    }
+
+    const modal = document.getElementById('shopping-modal');
+    const openBtn = document.getElementById('open-shopping-modal');
+    const closeBtn = document.getElementById('shopping-modal-close');
+    const cancelBtn = document.getElementById('shopping-modal-cancel');
+    const addBtn = document.getElementById('shopping-modal-add');
+    const storeSel = document.getElementById('shopping-modal-store');
+    const itemsContainer = document.getElementById('shopping-modal-items');
+    const countEl = document.getElementById('shopping-modal-count');
+    const allBtn = document.getElementById('shopping-modal-all');
+    const noneBtn = document.getElementById('shopping-modal-none');
+    const toast = document.getElementById('shopping-toast');
+
+    function showToast(msg) {
+      if (!toast) return;
+      toast.textContent = msg;
+      toast.classList.remove('hidden');
+      clearTimeout(showToast._t);
+      showToast._t = setTimeout(() => toast.classList.add('hidden'), 2200);
+    }
+
+    function refreshCount() {
+      const checks = itemsContainer.querySelectorAll('input.shop-item:checked');
+      countEl.textContent = String(checks.length);
+    }
+
+    function renderModal() {
+      // Stores
+      const stores = window.ShoppingLists.getStores();
+      const prevSelected = storeSel.value;
+      storeSel.innerHTML = stores.map((s) => `<option value="${s.id}">${s.name}${s.isDefault ? ' ★' : ''}</option>`).join('');
+      if (prevSelected && stores.some((s) => s.id === prevSelected)) storeSel.value = prevSelected;
+      // Items, scaled to current servings
+      const factor = getCurrentServings() / baseServings;
+      itemsContainer.innerHTML = shoppingIngredients.map((it, idx) => {
+        const scaledQty = it.qty != null && it.scalable ? it.qty * factor : it.qty;
+        const qtyHtml = scaledQty != null
+          ? `<span class="font-bold text-spice-700 dark:text-spice-300 ml-1">${fmtQtyClient(scaledQty)}${it.unit ? ' <span class="font-normal">' + it.unit + '</span>' : ''}</span>`
+          : '';
+        const noteHtml = it.note ? `<span class="block text-xs text-stone-500 dark:text-stone-400 mt-0.5">(${it.note})</span>` : '';
+        return `
+          <label class="flex items-start gap-3 px-3 py-2 rounded-lg hover:bg-stone-100 dark:hover:bg-stone-800/60 cursor-pointer transition-colors">
+            <input type="checkbox" class="shop-item mt-1 w-4 h-4 rounded border-stone-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer" data-idx="${idx}" data-qty="${scaledQty == null ? '' : scaledQty}" data-unit="${(it.unit || '').replace(/"/g, '&quot;')}" data-name="${(it.name || '').replace(/"/g, '&quot;')}" data-note="${(it.note || '').replace(/"/g, '&quot;')}" checked />
+            <span class="flex-1 text-sm leading-relaxed">${qtyHtml}<span>${it.name}</span>${noteHtml}</span>
+          </label>
+        `;
+      }).join('');
+      itemsContainer.querySelectorAll('input.shop-item').forEach((cb) => {
+        cb.addEventListener('change', refreshCount);
+      });
+      refreshCount();
+    }
+
+    function openModal() {
+      renderModal();
+      modal.classList.remove('hidden');
+      modal.classList.add('flex');
+      document.body.style.overflow = 'hidden';
+    }
+    function closeModal() {
+      modal.classList.add('hidden');
+      modal.classList.remove('flex');
+      document.body.style.overflow = '';
+    }
+
+    openBtn?.addEventListener('click', openModal);
+    closeBtn?.addEventListener('click', closeModal);
+    cancelBtn?.addEventListener('click', closeModal);
+    modal?.addEventListener('click', (e) => { if (e.target === modal) closeModal(); });
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !modal.classList.contains('hidden')) closeModal(); });
+
+    allBtn?.addEventListener('click', () => {
+      itemsContainer.querySelectorAll('input.shop-item').forEach((cb) => { cb.checked = true; });
+      refreshCount();
+    });
+    noneBtn?.addEventListener('click', () => {
+      itemsContainer.querySelectorAll('input.shop-item').forEach((cb) => { cb.checked = false; });
+      refreshCount();
+    });
+
+    addBtn?.addEventListener('click', () => {
+      const storeId = storeSel.value;
+      const items = [];
+      itemsContainer.querySelectorAll('input.shop-item:checked').forEach((cb) => {
+        const qtyStr = cb.dataset.qty;
+        items.push({
+          name: cb.dataset.name || '',
+          qty: qtyStr === '' ? null : parseFloat(qtyStr),
+          unit: cb.dataset.unit || '',
+          note: cb.dataset.note || '',
+        });
+      });
+      if (items.length === 0) { showToast('לא נבחרו רכיבים'); return; }
+      window.ShoppingLists.addItems(storeId, items, recipeSlug);
+      closeModal();
+      const storeName = window.ShoppingLists.getStores().find((s) => s.id === storeId)?.name || '';
+      showToast(`נוספו ${items.length} רכיבים לרשימת “${storeName}”`);
+    });
   </script>
 </Base>
 
