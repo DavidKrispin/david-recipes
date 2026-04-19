@@ -72,8 +72,9 @@ async function pull() {
   fs.mkdirSync(path.dirname(OUT_FILE), { recursive: true });
   fs.writeFileSync(OUT_FILE, JSON.stringify(data, null, 2) + '\n');
   const stores = (data.stores || []).length;
-  const items = (data.stores || []).reduce((n, s) => n + (s.items || []).length, 0);
-  console.log(`✓ Pulled ${stores} store(s), ${items} item(s) → ${OUT_FILE}`);
+  const items = (data.stores || []).reduce((n, s) => n + (s.items || []).filter((i) => !i.deletedAt).length, 0);
+  const deleted = (data.stores || []).reduce((n, s) => n + (s.items || []).filter((i) => i.deletedAt).length, 0);
+  console.log(`✓ Pulled ${stores} store(s), ${items} item(s)${deleted ? ` (+${deleted} soft-deleted)` : ''} → ${OUT_FILE}`);
 }
 
 async function push() {

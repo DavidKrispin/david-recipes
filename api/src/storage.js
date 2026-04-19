@@ -264,6 +264,14 @@ async function loadAll(householdId) {
   }
   if (stores.length === 0 && !rootMeta) return emptyData();
   if (!stores.some((s) => s.isDefault)) stores.unshift(structuredClone(DEFAULT_STORE));
+  // Sanitize: ensure every item has lastModified, and GC long-deleted items.
+  const cutoff = Date.now() - GC_DELETED_MS;
+  for (const s of stores) {
+    const storeMod = Number(s.lastModified) || 0;
+    s.items = (Array.isArray(s.items) ? s.items : [])
+      .map((it) => sanitizeItem(it, storeMod))
+      .filter((it) => it && !(it.deletedAt && Number(it.deletedAt) < cutoff));
+  }
   stores.sort((a, b) => {
     if (a.isDefault && !b.isDefault) return -1;
     if (!a.isDefault && b.isDefault) return 1;
@@ -275,13 +283,75 @@ async function loadAll(householdId) {
   };
 }
 
-async function replaceAll(householdId, data) {
-  if (!householdId) throw new Error('householdId required');
+// CRDT-lite item merge: pick newest by lastModified; soft-deletes win iff deletedAt > other side's lastModified.
+// Garbage-collect deleted items older than GC_DELETED_MS.
+const GC_DELETED_MS = 7 * 24 * 60 * 60 * 1000;
+
+function itemEffectiveTs(item) {
+  return Math.max(Number(item.lastModified) || 0, Number(item.deletedAt) || 0);
+}
+
+function mergeItems(aItems, bItems) {
+  const map = new Map();
+  const ingest = (items) => {
+    if (!Array.isArray(items)) return;
+    for (const raw of items) {
+      if (!raw || !raw.id) continue;
+      const id = String(raw.id);
+      const existing = map.get(id);
+      if (!existing) { map.set(id, raw); continue; }
+      // Newer effective timestamp wins. A delete only wins if deletedAt > other side's lastModified.
+      const ea = itemEffectiveTs(existing);
+      const eb = itemEffectiveTs(raw);
+      if (eb > ea) map.set(id, raw);
+      else if (eb === ea) {
+        // Tie: prefer the live one over a delete to avoid accidental loss; otherwise keep existing.
+        if (existing.deletedAt && !raw.deletedAt) map.set(id, raw);
+      }
+    }
+  };
+  ingest(aItems);
+  ingest(bItems);
+  // GC long-deleted items.
+  const cutoff = Date.now() - GC_DELETED_MS;
+  const out = [];
+  for (const it of map.values()) {
+    if (it.deletedAt && Number(it.deletedAt) < cutoff) continue;
+    out.push(it);
+  }
+  return out;
+}
+
+function mergeStore(a, b) {
+  // Both stores have the same id. Use newer store metadata (name/isDefault) but always merge items.
+  const aMod = Number(a.lastModified) || 0;
+  const bMod = Number(b.lastModified) || 0;
+  const newer = bMod > aMod ? b : a;
+  return {
+    id: newer.id,
+    name: newer.name,
+    isDefault: !!newer.isDefault,
+    items: mergeItems(a.items || [], b.items || []),
+    lastModified: Math.max(aMod, bMod),
+  };
+}
+
+function mergeStores(serverStores, clientStores) {
+  const map = new Map();
+  for (const s of serverStores || []) map.set(s.id, s);
+  for (const s of clientStores || []) {
+    const existing = map.get(s.id);
+    if (!existing) map.set(s.id, s);
+    else map.set(s.id, mergeStore(existing, s));
+  }
+  return Array.from(map.values());
+}
+
+async function writeAll(householdId, data) {
   const client = getClient(SHOPPING_TABLE);
   await ensureTable(client);
-  const incoming = sanitizeData(data);
   const now = Date.now();
-  incoming.lastModified = now;
+  const lastModified = Number(data.lastModified) || now;
   const existingKeys = new Set();
   try {
     const iter = client.listEntities({
@@ -292,7 +362,7 @@ async function replaceAll(householdId, data) {
     if (err.statusCode !== 404) throw err;
   }
   const keepKeys = new Set([ROOT_ROW_KEY]);
-  for (const store of incoming.stores) {
+  for (const store of data.stores) {
     const rowKey = STORE_PREFIX + sanitizeKey(store.id);
     keepKeys.add(rowKey);
     if (!store.lastModified) store.lastModified = now;
@@ -302,7 +372,7 @@ async function replaceAll(householdId, data) {
     );
   }
   await client.upsertEntity(
-    { partitionKey: householdId, rowKey: ROOT_ROW_KEY, data: JSON.stringify({ lastModified: incoming.lastModified }) },
+    { partitionKey: householdId, rowKey: ROOT_ROW_KEY, data: JSON.stringify({ lastModified }) },
     'Replace'
   );
   for (const k of existingKeys) {
@@ -310,60 +380,75 @@ async function replaceAll(householdId, data) {
       try { await client.deleteEntity(householdId, k); } catch (_) {}
     }
   }
+}
+
+// PUT /api/shopping — now does an item-level merge instead of blind overwrite.
+async function replaceAll(householdId, data) {
+  if (!householdId) throw new Error('householdId required');
+  const incoming = sanitizeData(data);
+  const server = await loadAll(householdId);
+  const mergedStores = mergeStores(server.stores, incoming.stores);
+  const merged = { stores: mergedStores, lastModified: Date.now() };
+  await writeAll(householdId, merged);
   return loadAll(householdId);
 }
 
 async function upsertStore(householdId, store) {
   if (!householdId) throw new Error('householdId required');
-  const client = getClient(SHOPPING_TABLE);
-  await ensureTable(client);
   if (!store || !store.id) throw new Error('store.id required');
-  const now = Date.now();
-  store.lastModified = store.lastModified || now;
-  const rowKey = STORE_PREFIX + sanitizeKey(store.id);
-  await client.upsertEntity(
-    { partitionKey: householdId, rowKey, data: JSON.stringify(store) },
-    'Replace'
-  );
-  await client.upsertEntity(
-    { partitionKey: householdId, rowKey: ROOT_ROW_KEY, data: JSON.stringify({ lastModified: now }) },
-    'Replace'
-  );
+  // Merge this single store into existing cloud state.
+  const incoming = sanitizeData({ stores: [store] });
+  const server = await loadAll(householdId);
+  const mergedStores = mergeStores(server.stores, incoming.stores);
+  const merged = { stores: mergedStores, lastModified: Date.now() };
+  await writeAll(householdId, merged);
   return loadAll(householdId);
 }
 
+// POST /api/shopping/sync — explicit merge endpoint.
 async function mergeSync(householdId, clientData) {
-  const server = await loadAll(householdId);
-  const incoming = sanitizeData(clientData || {});
-  const map = new Map();
-  for (const s of server.stores) map.set(s.id, s);
-  for (const s of incoming.stores) {
-    const existing = map.get(s.id);
-    if (!existing) map.set(s.id, s);
-    else {
-      const sMod = s.lastModified || 0;
-      const eMod = existing.lastModified || 0;
-      if (sMod >= eMod) map.set(s.id, s);
-    }
-  }
-  const merged = { stores: Array.from(map.values()), lastModified: Date.now() };
-  return replaceAll(householdId, merged);
+  return replaceAll(householdId, clientData);
 }
 
 function safeJson(s) { if (!s) return null; try { return JSON.parse(s); } catch (_) { return null; } }
 function sanitizeKey(id) { return String(id).replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 200); }
+function sanitizeItem(it, storeFallbackTs) {
+  if (!it || typeof it !== 'object') return null;
+  const id = it.id ? String(it.id) : null;
+  if (!id) return null;
+  // Migrate legacy items lacking timestamps: use store lastModified, or 1 (non-zero) so any new edit wins.
+  const lastModified = Number(it.lastModified) || Number(storeFallbackTs) || 1;
+  const out = {
+    id,
+    name: typeof it.name === 'string' ? it.name : '',
+    qty: it.qty == null ? null : (typeof it.qty === 'number' ? it.qty : Number(it.qty) || null),
+    unit: typeof it.unit === 'string' ? it.unit : '',
+    note: typeof it.note === 'string' ? it.note : '',
+    bought: !!it.bought,
+    source: typeof it.source === 'string' ? it.source : 'manual',
+    addedAt: it.addedAt || new Date().toISOString(),
+    lastModified,
+  };
+  if (it.deletedAt) out.deletedAt = Number(it.deletedAt) || null;
+  return out;
+}
 function sanitizeData(data) {
   const out = { stores: [], lastModified: data && data.lastModified ? Number(data.lastModified) : 0 };
   if (data && Array.isArray(data.stores)) {
     out.stores = data.stores
       .filter((s) => s && s.id && typeof s.name === 'string')
-      .map((s) => ({
-        id: String(s.id),
-        name: String(s.name),
-        isDefault: !!s.isDefault,
-        items: Array.isArray(s.items) ? s.items : [],
-        lastModified: Number(s.lastModified) || 0,
-      }));
+      .map((s) => {
+        const storeMod = Number(s.lastModified) || 0;
+        return {
+          id: String(s.id),
+          name: String(s.name),
+          isDefault: !!s.isDefault,
+          items: (Array.isArray(s.items) ? s.items : [])
+            .map((it) => sanitizeItem(it, storeMod))
+            .filter(Boolean),
+          lastModified: storeMod,
+        };
+      });
   }
   return out;
 }
