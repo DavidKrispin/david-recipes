@@ -1,6 +1,7 @@
 ---
 title: "חזה עוף שניצלים בנינג'ה גריל — מרינדת גריל קלאסית"
 emoji: "🍗"
+image: "/images/chicken-ninja-grill-classic.png"
 version: "v1"
 date: "2026-04-17"
 servings: 3
