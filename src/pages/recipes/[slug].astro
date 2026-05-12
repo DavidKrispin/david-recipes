@@ -525,12 +525,11 @@ const shoppingIngredients = data.ingredientGroups.flatMap((group) =>
       const storeId = storeSel.value;
       const items = [];
       itemsContainer.querySelectorAll('input.shop-item:checked').forEach((cb) => {
-        const qtyStr = cb.dataset.qty;
         items.push({
           name: cb.dataset.name || '',
-          qty: qtyStr === '' ? null : parseFloat(qtyStr),
-          unit: cb.dataset.unit || '',
-          note: cb.dataset.note || '',
+          qty: null,
+          unit: '',
+          note: '',
         });
       });
       if (items.length === 0) { showToast('לא נבחרו רכיבים'); return; }

@@ -455,7 +455,7 @@ function sanitizeData(data) {
 
 module.exports = {
   // shopping
-  loadAll, replaceAll, upsertStore, mergeSync,
+  loadAll, writeAll, replaceAll, upsertStore, mergeSync,
   // identity
   getUser, upsertUser, listUsersByHousehold, deleteUser,
   createHousehold, getHousehold,

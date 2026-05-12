@@ -1,0 +1,384 @@
+---
+// Widget-style shopping list — lightweight, no auth required, designed for Android home screen
+---
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no" />
+  <meta name="theme-color" content="#059669" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <title>🛒 קניות</title>
+  <link rel="manifest" href="/shopping/widget/manifest.json" />
+  <style is:global>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+      background: #f5f5f4;
+      color: #1c1917;
+      overflow-x: hidden;
+      -webkit-tap-highlight-color: transparent;
+      user-select: none;
+    }
+    .header {
+      background: linear-gradient(135deg, #059669, #047857);
+      color: white;
+      padding: 12px 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      position: sticky; top: 0; z-index: 10;
+    }
+    .header h1 { font-size: 18px; font-weight: 700; cursor: pointer; }
+    .sync-info { font-size: 11px; color: #a7f3d0; }
+    .refresh-btn {
+      background: none; border: none; color: white;
+      font-size: 18px; cursor: pointer; padding: 4px;
+    }
+    .refresh-btn.spinning { animation: spin 1s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .tabs {
+      display: flex; overflow-x: auto; scrollbar-width: none;
+      -webkit-overflow-scrolling: touch;
+      background: #047857; padding: 8px 10px; gap: 8px;
+    }
+    .tabs::-webkit-scrollbar { display: none; }
+    .tab {
+      flex-shrink: 0; padding: 8px 16px; font-size: 13px; font-weight: 600;
+      color: rgba(255,255,255,0.85);
+      background: rgba(255,255,255,0.12);
+      border-radius: 20px;
+      white-space: nowrap; cursor: pointer;
+      transition: all 0.2s;
+      border: 1.5px solid rgba(255,255,255,0.15);
+    }
+    .tab:active { transform: scale(0.95); }
+    .tab.dragging { opacity: 0.6; transform: scale(1.08); z-index: 10; transition: none; }
+    .tab.active {
+      color: #047857;
+      background: white;
+      border-color: white;
+      font-weight: 700;
+    }
+    .badge {
+      display: inline-block; background: rgba(255,255,255,0.3);
+      border-radius: 10px; padding: 1px 7px; font-size: 11px; margin-right: 4px;
+    }
+    .tab.active .badge { background: #d1fae5; color: #047857; }
+
+    .list { padding: 6px 10px 80px; min-height: calc(100vh - 95px); }
+    .item {
+      display: flex; align-items: center; gap: 10px;
+      padding: 11px 14px; margin: 3px 0;
+      background: white; border-radius: 12px;
+      box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+      font-size: 15px; transition: opacity 0.3s;
+    }
+    .item.bought { opacity: 0.35; text-decoration: line-through; order: 1; }
+    .item .check {
+      font-size: 22px; cursor: pointer; flex-shrink: 0;
+      width: 44px; height: 44px;
+      display: flex; align-items: center; justify-content: center;
+      border-radius: 8px;
+      -webkit-tap-highlight-color: rgba(5,150,105,0.15);
+    }
+    .item .check:active { background: rgba(5,150,105,0.1); }
+    .item .name { flex: 1; }
+
+    .empty { text-align: center; padding: 40px 20px; color: #a8a29e; font-size: 14px; }
+
+    .open-full {
+      position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%);
+      background: #059669; color: white; border: none;
+      padding: 12px 24px; border-radius: 24px;
+      font-size: 14px; font-weight: 700;
+      box-shadow: 0 4px 12px rgba(5,150,105,0.4);
+      cursor: pointer; z-index: 10;
+    }
+    .open-full:active { transform: translateX(-50%) scale(0.95); }
+
+    .login-notice {
+      text-align: center; padding: 20px; color: #78716c; font-size: 13px;
+      display: none;
+    }
+  </style>
+</head>
+<body>
+
+<div class="header">
+  <h1 id="title" onclick="window.open('/shopping/','_blank')">🛒 קניות</h1>
+  <div style="display:flex;align-items:center;gap:8px;">
+    <span class="sync-info" id="syncInfo"></span>
+    <button class="refresh-btn" id="refreshBtn" title="רענן">🔄</button>
+  </div>
+</div>
+<div class="tabs" id="tabs"></div>
+<div class="list" id="list"></div>
+<button class="open-full" onclick="window.open('/shopping/','_blank')">📋 רשימה מלאה</button>
+
+<script>
+  const WIDGET_API = '/api/shopping/widget-api/ZQwcYaJx1fiDhbmJvKZoeAmWshj6BrbJf6Q9Mp1BVOs';
+  let stores = [];
+  let activeId = null;
+
+  const tabsEl = document.getElementById('tabs');
+  const listEl = document.getElementById('list');
+  const syncEl = document.getElementById('syncInfo');
+  const refreshBtn = document.getElementById('refreshBtn');
+
+  refreshBtn.addEventListener('click', load);
+
+  async function load() {
+    refreshBtn.classList.add('spinning');
+    syncEl.textContent = 'מעדכן...';
+    try {
+      const res = await fetch(WIDGET_API);
+      if (!res.ok) throw new Error(res.status);
+      const data = await res.json();
+      stores = data.stores || [];
+      // Restore saved tab order
+      try {
+        const savedOrder = JSON.parse(localStorage.getItem('widget-store-order') || '[]');
+        if (savedOrder.length) {
+          stores.sort((a, b) => {
+            const ai = savedOrder.indexOf(a.id);
+            const bi = savedOrder.indexOf(b.id);
+            if (ai === -1 && bi === -1) return 0;
+            if (ai === -1) return 1;
+            if (bi === -1) return -1;
+            return ai - bi;
+          });
+        }
+      } catch(_) {}
+      // Cache in localStorage for offline
+      try { localStorage.setItem('widget-cache', JSON.stringify(stores)); } catch(_) {}
+      syncEl.textContent = timeStr();
+      render();
+    } catch(e) {
+      syncEl.textContent = '⚠️ אופליין';
+      // Try cache
+      try {
+        const c = JSON.parse(localStorage.getItem('widget-cache') || '[]');
+        if (c.length) { stores = c; render(); }
+      } catch(_) {}
+    } finally {
+      refreshBtn.classList.remove('spinning');
+    }
+  }
+
+  function timeStr() {
+    const d = new Date();
+    return d.toLocaleTimeString('he-IL', { hour:'2-digit', minute:'2-digit' });
+  }
+
+  function render() {
+    // Tabs
+    if (!activeId && stores.length) activeId = stores[0].id;
+    tabsEl.innerHTML = stores.map(s => {
+      const count = s.items.filter(i => !i.bought).length;
+      return `<div class="tab${s.id===activeId?' active':''}" data-id="${s.id}" role="button" draggable="false">${s.name} <span class="badge">${count}</span></div>`;
+    }).join('');
+
+    // Tab click + long-press drag reorder
+    let dragTab = null;
+    let longPressTimer = null;
+    let isDragging = false;
+    let dragStartX = 0;
+
+    tabsEl.querySelectorAll('.tab').forEach(t => {
+      function activate() {
+        if (isDragging) return;
+        activeId = t.dataset.id; render();
+      }
+
+      // Normal tap
+      t.addEventListener('click', (e) => { if (!isDragging) activate(); });
+
+      // Long press to start reorder
+      t.addEventListener('touchstart', (e) => {
+        dragStartX = e.touches[0].clientX;
+        longPressTimer = setTimeout(() => {
+          isDragging = true;
+          dragTab = t;
+          t.style.opacity = '0.6';
+          t.style.transform = 'scale(1.08)';
+          t.style.zIndex = '10';
+          // Haptic feedback if available
+          if (navigator.vibrate) navigator.vibrate(30);
+        }, 400);
+      }, { passive: true });
+
+      t.addEventListener('touchmove', (e) => {
+        // If not yet dragging, cancel if moved too much
+        if (!isDragging && longPressTimer) {
+          const dx = Math.abs(e.touches[0].clientX - dragStartX);
+          if (dx > 10) { clearTimeout(longPressTimer); longPressTimer = null; }
+          return;
+        }
+        if (!isDragging || !dragTab) return;
+
+        // Find which tab we're over
+        const x = e.touches[0].clientX;
+        const tabs = [...tabsEl.querySelectorAll('.tab')];
+        for (const other of tabs) {
+          if (other === dragTab) continue;
+          const rect = other.getBoundingClientRect();
+          if (x > rect.left && x < rect.right) {
+            // Swap in DOM
+            const dragIdx = tabs.indexOf(dragTab);
+            const otherIdx = tabs.indexOf(other);
+            if (dragIdx < otherIdx) {
+              tabsEl.insertBefore(dragTab, other.nextSibling);
+            } else {
+              tabsEl.insertBefore(dragTab, other);
+            }
+            break;
+          }
+        }
+      }, { passive: true });
+
+      t.addEventListener('touchend', (e) => {
+        clearTimeout(longPressTimer);
+        longPressTimer = null;
+        if (isDragging && dragTab) {
+          dragTab.style.opacity = '';
+          dragTab.style.transform = '';
+          dragTab.style.zIndex = '';
+          // Save new order to stores array
+          const newOrder = [...tabsEl.querySelectorAll('.tab')].map(el => el.dataset.id);
+          stores.sort((a, b) => newOrder.indexOf(a.id) - newOrder.indexOf(b.id));
+          // Persist order in localStorage
+          try { localStorage.setItem('widget-store-order', JSON.stringify(newOrder)); } catch(_) {}
+          dragTab = null;
+          isDragging = false;
+          // Re-render to clean up
+          setTimeout(() => render(), 50);
+        } else {
+          // Normal tap
+          e.preventDefault();
+          activate();
+        }
+      });
+
+      t.addEventListener('touchcancel', () => {
+        clearTimeout(longPressTimer);
+        longPressTimer = null;
+        if (dragTab) {
+          dragTab.style.opacity = '';
+          dragTab.style.transform = '';
+          dragTab.style.zIndex = '';
+        }
+        dragTab = null;
+        isDragging = false;
+      });
+    });
+
+    // List
+    const store = stores.find(s => s.id === activeId);
+    if (!store || !store.items.length) {
+      listEl.innerHTML = '<div class="empty">🎉 הרשימה ריקה!</div>';
+      return;
+    }
+    const sorted = [...store.items].sort((a,b) => a.bought === b.bought ? 0 : a.bought ? 1 : -1);
+    listEl.innerHTML = sorted.map(i => `
+      <div class="item${i.bought?' bought':''}" data-id="${i.id}" data-store="${store.id}">
+        <span class="check">${i.bought ? '☑' : '☐'}</span>
+        <span class="name">${esc(i.name)}</span>
+      </div>
+    `).join('');
+
+    // Only checkbox toggles bought (not entire row)
+    listEl.querySelectorAll('.item .check').forEach(checkEl => {
+      checkEl.addEventListener('click', (e) => {
+        e.stopPropagation();
+        toggleItem(checkEl.closest('.item'));
+      });
+      checkEl.addEventListener('touchend', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        toggleItem(checkEl.closest('.item'));
+      });
+    });
+  }
+
+  function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+
+  // Pending syncs queue
+  let pendingSyncs = [];
+  let syncInFlight = false;
+
+  function toggleItem(el) {
+    const itemId = el.dataset.id;
+    const storeId = el.dataset.store;
+    // Find and toggle locally
+    const store = stores.find(s => s.id === storeId);
+    if (!store) return;
+    const item = store.items.find(i => i.id === itemId);
+    if (!item) return;
+    item.bought = !item.bought;
+    // Update UI immediately
+    render();
+    // Queue sync to server
+    pendingSyncs.push({ storeId, itemId, bought: item.bought });
+    debouncedSync();
+  }
+
+  let syncTimer = null;
+  function debouncedSync() {
+    if (syncTimer) clearTimeout(syncTimer);
+    syncTimer = setTimeout(flushSyncs, 1000);
+  }
+
+  async function flushSyncs() {
+    if (syncInFlight || !pendingSyncs.length) return;
+    syncInFlight = true;
+    const batch = [...pendingSyncs];
+    pendingSyncs = [];
+    syncEl.textContent = '⬆️';
+    try {
+      for (const s of batch) {
+        await fetch(WIDGET_API, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(s)
+        });
+      }
+      syncEl.textContent = '✅ ' + timeStr();
+    } catch(e) {
+      syncEl.textContent = '⚠️ לא סונכרן';
+      // Put back failed syncs
+      pendingSyncs = [...batch, ...pendingSyncs];
+    } finally {
+      syncInFlight = false;
+      if (pendingSyncs.length) debouncedSync();
+    }
+  }
+
+  // Swipe left/right on list area to switch stores
+  let touchStartX = 0;
+  let touchStartY = 0;
+  listEl.addEventListener('touchstart', (e) => {
+    touchStartX = e.touches[0].clientX;
+    touchStartY = e.touches[0].clientY;
+  }, { passive: true });
+  listEl.addEventListener('touchend', (e) => {
+    const dx = e.changedTouches[0].clientX - touchStartX;
+    const dy = e.changedTouches[0].clientY - touchStartY;
+    if (Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy) * 1.5) {
+      const ids = stores.map(s => s.id);
+      const idx = ids.indexOf(activeId);
+      if (idx < 0) return;
+      // RTL: swipe left = next, swipe right = prev
+      if (dx < 0 && idx < ids.length - 1) { activeId = ids[idx + 1]; render(); }
+      else if (dx > 0 && idx > 0) { activeId = ids[idx - 1]; render(); }
+    }
+  }, { passive: true });
+
+  // Auto-refresh every 60s
+  setInterval(load, 60000);
+  load();
+</script>
+</body>
+</html>
