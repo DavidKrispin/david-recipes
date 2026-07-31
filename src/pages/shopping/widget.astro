@@ -306,21 +306,21 @@
       });
     });
 
-    // List
+    // List — bought items stay visible, greyed + struck-through, sunk to bottom
     const store = stores.find(s => s.id === activeId);
-    const visible = store ? store.items.filter(i => !i.bought) : [];
-    if (!store || !visible.length) {
+    if (!store || !store.items.length) {
       listEl.innerHTML = '<div class="empty">🎉 הרשימה ריקה!</div>';
       return;
     }
-    listEl.innerHTML = visible.map(i => `
-      <div class="item" data-id="${i.id}" data-store="${store.id}">
+    const sorted = [...store.items].sort((a,b) => a.bought === b.bought ? 0 : a.bought ? 1 : -1);
+    listEl.innerHTML = sorted.map(i => `
+      <div class="item${i.bought?' bought':''}" data-id="${i.id}" data-store="${store.id}">
         <span class="name">${esc(i.name)}</span>
-        <span class="check">☐</span>
+        <span class="check">${i.bought ? '☑' : '☐'}</span>
       </div>
     `).join('');
 
-    // Only checkbox toggles bought (not entire row)
+    // Checkbox toggles bought (mark AND un-mark) — not the whole row
     listEl.querySelectorAll('.item .check').forEach(checkEl => {
       checkEl.addEventListener('click', (e) => {
         e.stopPropagation();
@@ -370,16 +370,23 @@
     if (!store) return;
     const item = store.items.find(i => i.id === itemId);
     if (!item) return;
-    // Widget only ever MARKS (removes) — items are hidden once bought
-    item.bought = true;
-    // Push onto undo stack (cap 10, drop oldest)
-    undoStack.push({ storeId, itemId, name: item.name });
-    if (undoStack.length > 10) undoStack.shift();
-    render();
-    showToast(`${item.name} הוסר`);
-    showUndo(20000);   // undo button lives 20s unless clicked
+
+    if (!item.bought) {
+      // MARK — grey it out, toast + undo affordance
+      item.bought = true;
+      undoStack.push({ storeId, itemId, name: item.name });
+      if (undoStack.length > 10) undoStack.shift();
+      render();
+      showToast(`${item.name} הוסר`);
+      showUndo(20000);   // undo button lives 20s unless clicked
+    } else {
+      // Direct un-mark by tapping the greyed item — keep it in sync, drop from undo stack
+      item.bought = false;
+      undoStack = undoStack.filter(u => !(u.storeId === storeId && u.itemId === itemId));
+      render();
+    }
     // Queue sync to server
-    pendingSyncs.push({ storeId, itemId, bought: true });
+    pendingSyncs.push({ storeId, itemId, bought: item.bought });
     debouncedSync();
   }
 
