@@ -103,6 +103,35 @@
       text-align: center; padding: 20px; color: #78716c; font-size: 13px;
       display: none;
     }
+
+    /* Toast: "<item> הוסר" — small bottom popup, auto-hides after 10s */
+    .toast {
+      position: fixed; bottom: 118px; left: 50%;
+      transform: translateX(-50%) translateY(10px);
+      background: #1c1917; color: white;
+      padding: 10px 18px; border-radius: 20px;
+      font-size: 14px; font-weight: 600;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.3);
+      opacity: 0; pointer-events: none;
+      transition: opacity .3s, transform .3s; z-index: 20;
+      max-width: 80vw; white-space: nowrap;
+      overflow: hidden; text-overflow: ellipsis;
+    }
+    .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+    /* Undo button — appears 20s after a mark, extends to 60s on each click */
+    .undo-btn {
+      position: fixed; bottom: 70px; left: 50%;
+      transform: translateX(-50%) translateY(10px);
+      background: #f59e0b; color: #1c1917; border: none;
+      padding: 10px 22px; border-radius: 22px;
+      font-size: 14px; font-weight: 700;
+      box-shadow: 0 4px 12px rgba(245,158,11,0.5); cursor: pointer;
+      opacity: 0; pointer-events: none;
+      transition: opacity .3s, transform .3s; z-index: 21;
+    }
+    .undo-btn.show { opacity: 1; pointer-events: auto; transform: translateX(-50%) translateY(0); }
+    .undo-btn:active { transform: translateX(-50%) scale(0.95); }
   </style>
 </head>
 <body>
@@ -117,6 +146,8 @@
 <div class="tabs" id="tabs"></div>
 <div class="list" id="list"></div>
 <button class="open-full" onclick="window.open('/shopping/','_blank')">📋 רשימה מלאה</button>
+<div class="toast" id="toast"></div>
+<button class="undo-btn" id="undoBtn">↩️ בטל סימון</button>
 
 <script>
   const WIDGET_API = '/api/shopping/widget-api/ZQwcYaJx1fiDhbmJvKZoeAmWshj6BrbJf6Q9Mp1BVOs';
@@ -277,15 +308,15 @@
 
     // List
     const store = stores.find(s => s.id === activeId);
-    if (!store || !store.items.length) {
+    const visible = store ? store.items.filter(i => !i.bought) : [];
+    if (!store || !visible.length) {
       listEl.innerHTML = '<div class="empty">🎉 הרשימה ריקה!</div>';
       return;
     }
-    const sorted = [...store.items].sort((a,b) => a.bought === b.bought ? 0 : a.bought ? 1 : -1);
-    listEl.innerHTML = sorted.map(i => `
-      <div class="item${i.bought?' bought':''}" data-id="${i.id}" data-store="${store.id}">
-        <span class="check">${i.bought ? '☑' : '☐'}</span>
+    listEl.innerHTML = visible.map(i => `
+      <div class="item" data-id="${i.id}" data-store="${store.id}">
         <span class="name">${esc(i.name)}</span>
+        <span class="check">☐</span>
       </div>
     `).join('');
 
@@ -309,21 +340,69 @@
   let pendingSyncs = [];
   let syncInFlight = false;
 
+  // ---- Undo system ----
+  const toastEl = document.getElementById('toast');
+  const undoBtn = document.getElementById('undoBtn');
+  let undoStack = [];          // most-recent last; max 10
+  let toastTimer = null;
+  let undoHideTimer = null;
+
+  function showToast(msg) {
+    toastEl.textContent = msg;
+    toastEl.classList.add('show');
+    if (toastTimer) clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => toastEl.classList.remove('show'), 10000);
+  }
+
+  function showUndo(ms) {
+    undoBtn.classList.add('show');
+    if (undoHideTimer) clearTimeout(undoHideTimer);
+    undoHideTimer = setTimeout(() => {
+      undoBtn.classList.remove('show');
+      undoStack = [];   // window closed — forget history
+    }, ms);
+  }
+
   function toggleItem(el) {
     const itemId = el.dataset.id;
     const storeId = el.dataset.store;
-    // Find and toggle locally
     const store = stores.find(s => s.id === storeId);
     if (!store) return;
     const item = store.items.find(i => i.id === itemId);
     if (!item) return;
-    item.bought = !item.bought;
-    // Update UI immediately
+    // Widget only ever MARKS (removes) — items are hidden once bought
+    item.bought = true;
+    // Push onto undo stack (cap 10, drop oldest)
+    undoStack.push({ storeId, itemId, name: item.name });
+    if (undoStack.length > 10) undoStack.shift();
     render();
+    showToast(`${item.name} הוסר`);
+    showUndo(20000);   // undo button lives 20s unless clicked
     // Queue sync to server
-    pendingSyncs.push({ storeId, itemId, bought: item.bought });
+    pendingSyncs.push({ storeId, itemId, bought: true });
     debouncedSync();
   }
+
+  function undoLast() {
+    const last = undoStack.pop();
+    if (!last) { undoBtn.classList.remove('show'); return; }
+    const store = stores.find(s => s.id === last.storeId);
+    const item = store && store.items.find(i => i.id === last.itemId);
+    if (item) {
+      item.bought = false;
+      render();
+      showToast(`${last.name} הוחזר`);
+      pendingSyncs.push({ storeId: last.storeId, itemId: last.itemId, bought: false });
+      debouncedSync();
+    }
+    if (undoStack.length) {
+      showUndo(60000);        // keep alive 1 more minute for the next item back
+    } else {
+      if (undoHideTimer) clearTimeout(undoHideTimer);
+      undoBtn.classList.remove('show');
+    }
+  }
+  undoBtn.addEventListener('click', (e) => { e.stopPropagation(); undoLast(); });
 
   let syncTimer = null;
   function debouncedSync() {
