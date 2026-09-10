@@ -2,6 +2,7 @@
 title: "עוגת דבש מלכותית ועסיסית"
 emoji: "🍯"
 description: "עוגת דבש פרווה, עמוקה ורכה עם קפה, תפוז וויסקי — משתבחת במיוחד ביום שאחרי האפייה."
+image: "/images/honey-cake-majestic-moist.png"
 version: "v1"
 date: "2026-09-10"
 servings: 16
